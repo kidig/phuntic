@@ -164,3 +164,8 @@ class TestPhuntic:
         obj = my_test_func
         with pytest.raises(PhunticUnknownTypeError):
             dumps(obj)
+
+    def test_decode_unknown(self):
+        data = json.dumps({'_type': 'fuck', 'value': 1})
+        with pytest.raises(ValueError):
+            loads(data)

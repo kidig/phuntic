@@ -26,7 +26,6 @@ class PhunticDecoder(json.JSONDecoder):
         json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
 
     def object_hook(self, o):
-        print("debug:", o)
         if '_type' not in o:
             return o
 
@@ -36,10 +35,10 @@ class PhunticDecoder(json.JSONDecoder):
         if obj_type == 'none':
             return None
 
-        if obj_type in ('dict', 'list', 'str', 'int'):
+        if obj_type in ('dict', 'list', 'str'):
             return value
 
-        if obj_type in ('float', 'set', 'frozenset', 'tuple'):
+        if obj_type in ('int', 'float', 'set', 'frozenset', 'tuple'):
             return locate(obj_type)(value)
 
         if obj_type == 'decimal':
@@ -51,7 +50,7 @@ class PhunticDecoder(json.JSONDecoder):
         if obj_type == 'frozendict':
             return frozendict(value)
 
-        return o
+        raise ValueError(repr(o) + ' cannot be decoded.')
 
 
 def wrap_dict(obj):
