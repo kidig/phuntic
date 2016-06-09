@@ -1,8 +1,10 @@
-from . import dumps, loads, PyddingUnknownTypeError
 import json
-import pytest
-from decimal import Decimal
 from datetime import datetime, timezone, timedelta
+from decimal import Decimal
+
+import pytest
+from frozendict import frozendict
+from . import dumps, loads, PhunticUnknownTypeError
 
 
 class MyTestClass:
@@ -13,7 +15,7 @@ def my_test_func():
     pass
 
 
-class TestPydding:
+class TestPhuntic:
     def assertJson(self, obj, json_obj):
         s = dumps(obj, sort_keys=True)
         assert s == json.dumps(json_obj, sort_keys=True)
@@ -45,7 +47,7 @@ class TestPydding:
         obj = []
         self.assertJson(obj, {"_type": "list", "value": []})
 
-        obj = [1,2,3]
+        obj = [1, 2, 3]
         expected = {
             "_type": "list",
             "value": [
@@ -60,7 +62,7 @@ class TestPydding:
         obj = set()
         self.assertJson(obj, {"_type": "set", "value": []})
 
-        obj = {1,2}
+        obj = {1, 2}
         expected = {
             "_type": "set",
             "value": [
@@ -74,7 +76,7 @@ class TestPydding:
         obj = frozenset()
         self.assertJson(obj, {"_type": "frozenset", "value": []})
 
-        obj = frozenset([1,2])
+        obj = frozenset([1, 2])
         expected = {
             "_type": "frozenset",
             "value": [
@@ -119,6 +121,26 @@ class TestPydding:
         }
         self.assertJson(obj, expected)
 
+    def test_frozendict(self):
+        obj = frozendict()
+        self.assertJson(obj, {"_type": "frozendict", "value": {}})
+
+        obj = frozendict(one='test', three=3.14)
+        expected = {
+            "_type": "frozendict",
+            "value": {
+                "one": {
+                    "_type": "str",
+                    "value": "test",
+                },
+                "three": {
+                    "_type": "float",
+                    "value": 3.14,
+                }
+            }
+        }
+        self.assertJson(obj, expected)
+
     def test_decimal(self):
         obj = Decimal('1.2342')
         self.assertJson(obj, {"_type": "decimal", "value": str(obj)})
@@ -130,15 +152,15 @@ class TestPydding:
 
     def test_class(self):
         obj = object()
-        with pytest.raises(PyddingUnknownTypeError):
-            s = dumps(obj)
+        with pytest.raises(PhunticUnknownTypeError):
+            dumps(obj)
 
     def test_custom_class(self):
         obj = MyTestClass()
-        with pytest.raises(PyddingUnknownTypeError):
-            s = dumps(obj)
+        with pytest.raises(PhunticUnknownTypeError):
+            dumps(obj)
 
     def test_func(self):
         obj = my_test_func
-        with pytest.raises(PyddingUnknownTypeError):
-            s = dumps(obj)
+        with pytest.raises(PhunticUnknownTypeError):
+            dumps(obj)

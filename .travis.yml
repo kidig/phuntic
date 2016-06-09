@@ -4,7 +4,11 @@ python:
 - "3.5"
 
 before_install:
-- pip install pytest pytest-cov
+- pip install pytest pytest-cov frozendict
+- pip install coveralls
 
 script:
-- py.test tests.py
+- py.test --cov=phuntic phuntic/*
+
+after_success:
+- coveralls

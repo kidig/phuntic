@@ -1,24 +1,27 @@
-import json
 import datetime
+import json
 from decimal import Decimal
 from pydoc import locate
 
-LIST_TYPES = [list, set, frozenset, tuple]
-FROZENDICT_ENABLED = False
+__version__ = '0.1.0'
+
+__all__ = ['dumps', 'loads', 'PhunticUnknownTypeError']
+
+DICT_TYPES = [dict]
 
 try:
     from frozendict import frozendict
-    LIST_TYPES += [frozendict]
-    FROZENDICT_ENABLED = True
+
+    DICT_TYPES += [frozendict]
 except ImportError:
     pass
 
 
-class PyddingUnknownTypeError(TypeError):
+class PhunticUnknownTypeError(TypeError):
     pass
 
 
-class PyddingDecoder(json.JSONDecoder):
+class PhunticDecoder(json.JSONDecoder):
     def __init__(self, *args, **kwargs):
         json.JSONDecoder.__init__(self, object_hook=self.object_hook, *args, **kwargs)
 
@@ -45,34 +48,40 @@ class PyddingDecoder(json.JSONDecoder):
         if obj_type == 'datetime':
             return datetime.datetime.utcfromtimestamp(value)
 
-        if FROZENDICT_ENABLED and obj_type == 'frozendict':
+        if obj_type == 'frozendict':
             return frozendict(value)
 
         return o
 
 
+def wrap_dict(obj):
+    return dict(_type=type(obj).__name__, value={k: wrap_object(o) for k, o in obj.items()})
+
+
+def wrap_list(obj):
+    return dict(_type=type(obj).__name__, value=[wrap_object(o) for o in obj])
+
+
 def wrap_object(obj):
     if obj is None:
-        obj = dict(_type='none')
-    elif isinstance(obj, (str, int, float, bool)):
-        obj = dict(_type=type(obj).__name__, value=obj)
+        return dict(_type='none')
 
-    elif isinstance(obj, dict):
-        obj = dict(_type='dict', value={k: wrap_object(v) for k, v in obj.items()})
+    elif isinstance(obj, (str, int, float, bool)):
+        return dict(_type=type(obj).__name__, value=obj)
+
+    elif isinstance(obj, tuple(DICT_TYPES)):
+        return wrap_dict(obj)
 
     elif isinstance(obj, (list, set, frozenset, tuple)):
-        obj = dict(_type=type(obj).__name__, value=[wrap_object(v) for v in obj])
+        return wrap_list(obj)
 
     elif isinstance(obj, Decimal):
-        obj = dict(_type='decimal', value=str(obj))
+        return dict(_type='decimal', value=str(obj))
 
     elif isinstance(obj, datetime.datetime):
-        obj = dict(_type='datetime', value=obj.replace(tzinfo=datetime.timezone.utc).timestamp())
+        return dict(_type='datetime', value=obj.replace(tzinfo=datetime.timezone.utc).timestamp())
 
-    else:
-        raise PyddingUnknownTypeError(repr(obj) + " is not pydding-like!")
-
-    return obj
+    raise PhunticUnknownTypeError(repr(obj) + " is not phuntic!")
 
 
 def dumps(obj, **kwargs):
@@ -82,5 +91,5 @@ def dumps(obj, **kwargs):
 
 def loads(*args, **kwargs):
     """Deserialize ``s`` (a ``str`` instance containing a JSON document) to a Python object"""
-    kwargs['cls'] = kwargs.pop('cls', PyddingDecoder)
+    kwargs['cls'] = kwargs.pop('cls', PhunticDecoder)
     return json.loads(*args, **kwargs)
