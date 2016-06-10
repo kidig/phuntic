@@ -3,9 +3,7 @@ import json
 from decimal import Decimal
 from pydoc import locate
 
-__version__ = '0.1.0'
-
-__all__ = ['dumps', 'loads', 'PhunticUnknownTypeError']
+__version__ = '0.1.3'
 
 DICT_TYPES = [dict]
 
@@ -29,39 +27,54 @@ class PhunticDecoder(json.JSONDecoder):
         if '_type' not in o:
             return o
 
-        obj_type = o['_type']
-        value = o.get('value', None)
-
-        if obj_type == 'none':
-            return None
-
-        if obj_type in ('dict', 'list', 'str'):
-            return value
-
-        if obj_type in ('int', 'float', 'set', 'frozenset', 'tuple'):
-            return locate(obj_type)(value)
-
-        if obj_type == 'decimal':
-            return Decimal(value)
-
-        if obj_type == 'datetime':
-            return datetime.datetime.utcfromtimestamp(value)
-
-        if obj_type == 'frozendict':
-            return frozendict(value)
-
-        raise ValueError(repr(o) + ' cannot be decoded.')
+        return _unwrap_object(o, nested=False)
 
 
-def wrap_dict(obj):
-    return dict(_type=type(obj).__name__, value={k: wrap_object(o) for k, o in obj.items()})
+def _unwrap_object(obj, nested=False):
+    obj_type = obj['_type']
+    value = obj.get('value', None)
+
+    if obj_type == 'none':
+        return None
+
+    if obj_type in ('bool', 'str', 'int', 'float'):
+        return locate(obj_type)(value)
+
+    if obj_type == 'decimal':
+        return Decimal(value)
+
+    if obj_type == 'datetime':
+        return datetime.datetime.utcfromtimestamp(value)
+
+    if obj_type in ('list', 'dict'):
+        return locate(obj_type)(unwraps(value)) if nested else value
+
+    if obj_type in ('set', 'frozenset', 'tuple'):
+        if nested:
+            value = unwraps(value)
+        return locate(obj_type)(value)
+
+    if obj_type == 'frozendict':
+        if nested:
+            value = unwraps(value)
+        return frozendict(value)
+
+    raise ValueError(repr(obj) + ' cannot be decoded.')
 
 
-def wrap_list(obj):
-    return dict(_type=type(obj).__name__, value=[wrap_object(o) for o in obj])
+def unwraps(obj):
+    if isinstance(obj, dict):
+        if '_type' not in obj:
+            return {k: unwraps(o) for k, o in obj.items()}
+        return _unwrap_object(obj, nested=True)
+
+    elif isinstance(obj, list):
+        return [unwraps(o) for o in obj]
+
+    raise ValueError(repr(obj) + ' is unknown')
 
 
-def wrap_object(obj):
+def wraps(obj):
     if obj is None:
         return dict(_type='none')
 
@@ -69,10 +82,10 @@ def wrap_object(obj):
         return dict(_type=type(obj).__name__, value=obj)
 
     elif isinstance(obj, tuple(DICT_TYPES)):
-        return wrap_dict(obj)
+        return dict(_type=type(obj).__name__, value={k: wraps(o) for k, o in obj.items()})
 
     elif isinstance(obj, (list, set, frozenset, tuple)):
-        return wrap_list(obj)
+        return dict(_type=type(obj).__name__, value=[wraps(o) for o in obj])
 
     elif isinstance(obj, Decimal):
         return dict(_type='decimal', value=str(obj))
@@ -85,7 +98,7 @@ def wrap_object(obj):
 
 def dumps(obj, **kwargs):
     """Serialize ``obj`` to a JSON formatted ``str``"""
-    return json.dumps(wrap_object(obj), **kwargs)
+    return json.dumps(wraps(obj), **kwargs)
 
 
 def loads(*args, **kwargs):

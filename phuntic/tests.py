@@ -4,23 +4,19 @@ from decimal import Decimal
 
 import pytest
 from frozendict import frozendict
-from . import dumps, loads, PhunticUnknownTypeError
+from . import dumps, loads, PhunticUnknownTypeError, wraps, unwraps
 
 
 class MyTestClass:
     pass
 
 
-def my_test_func():
-    pass
+class AssertFuncMixin:
+    def assertFunc(self, obj, expected):
+        raise NotImplementedError()
 
 
-class TestPhuntic:
-    def assertJson(self, obj, json_obj):
-        s = dumps(obj, sort_keys=True)
-        assert s == json.dumps(json_obj, sort_keys=True)
-        assert loads(s) == obj
-
+class PhunticTestCases(AssertFuncMixin):
     def test_none(self):
         s = dumps(None, sort_keys=True)
         assert s == json.dumps({"_type": "none"}, sort_keys=True)
@@ -28,24 +24,28 @@ class TestPhuntic:
 
     def test_string(self):
         obj = 'test'
-        self.assertJson(obj, {"_type": "str", "value": obj})
+        self.assertFunc(obj, {"_type": "str", "value": obj})
 
     def test_int(self):
         obj = 100500
-        self.assertJson(obj, {"_type": "int", "value": obj})
+        self.assertFunc(obj, {"_type": "int", "value": obj})
 
     def test_float(self):
         obj = 3.1428
-        self.assertJson(obj, {"_type": "float", "value": obj})
+        self.assertFunc(obj, {"_type": "float", "value": obj})
 
         obj = float(1)
-        self.assertJson(obj, {"_type": "float", "value": obj})
+        self.assertFunc(obj, {"_type": "float", "value": obj})
         s = dumps(obj, sort_keys=True)
         assert isinstance(loads(s), float)
 
+    def test_bool(self):
+        self.assertFunc(True, {"_type": "bool", "value": True})
+        self.assertFunc(False, {"_type": "bool", "value": False})
+
     def test_list(self):
         obj = []
-        self.assertJson(obj, {"_type": "list", "value": []})
+        self.assertFunc(obj, {"_type": "list", "value": []})
 
         obj = [1, 2, 3]
         expected = {
@@ -56,11 +56,11 @@ class TestPhuntic:
                 {"_type": "int", "value": 3},
             ]
         }
-        self.assertJson(obj, expected)
+        self.assertFunc(obj, expected)
 
     def test_set(self):
         obj = set()
-        self.assertJson(obj, {"_type": "set", "value": []})
+        self.assertFunc(obj, {"_type": "set", "value": []})
 
         obj = {1, 2}
         expected = {
@@ -70,11 +70,11 @@ class TestPhuntic:
                 {"_type": "int", "value": 2},
             ]
         }
-        self.assertJson(obj, expected)
+        self.assertFunc(obj, expected)
 
     def test_frozenset(self):
         obj = frozenset()
-        self.assertJson(obj, {"_type": "frozenset", "value": []})
+        self.assertFunc(obj, {"_type": "frozenset", "value": []})
 
         obj = frozenset([1, 2])
         expected = {
@@ -84,11 +84,11 @@ class TestPhuntic:
                 {"_type": "int", "value": 2}
             ]
         }
-        self.assertJson(obj, expected)
+        self.assertFunc(obj, expected)
 
     def test_tuple(self):
         obj = tuple()
-        self.assertJson(obj, {"_type": "tuple", "value": obj})
+        self.assertFunc(obj, {"_type": "tuple", "value": []})
 
         obj = ('test', 1, 1.12)
         expected = {
@@ -99,11 +99,11 @@ class TestPhuntic:
                 {"_type": "float", "value": 1.12},
             ]
         }
-        self.assertJson(obj, expected)
+        self.assertFunc(obj, expected)
 
     def test_dict(self):
         obj = dict()
-        self.assertJson(obj, {"_type": "dict", "value": {}})
+        self.assertFunc(obj, {"_type": "dict", "value": {}})
 
         obj = {'one': 'test', 'two': 123}
         expected = {
@@ -119,11 +119,11 @@ class TestPhuntic:
                 }
             }
         }
-        self.assertJson(obj, expected)
+        self.assertFunc(obj, expected)
 
     def test_frozendict(self):
         obj = frozendict()
-        self.assertJson(obj, {"_type": "frozendict", "value": {}})
+        self.assertFunc(obj, {"_type": "frozendict", "value": {}})
 
         obj = frozendict(one='test', three=3.14)
         expected = {
@@ -139,16 +139,23 @@ class TestPhuntic:
                 }
             }
         }
-        self.assertJson(obj, expected)
+        self.assertFunc(obj, expected)
 
     def test_decimal(self):
         obj = Decimal('1.2342')
-        self.assertJson(obj, {"_type": "decimal", "value": str(obj)})
+        self.assertFunc(obj, {"_type": "decimal", "value": str(obj)})
 
     def test_datetime(self):
         obj = datetime.now()
         obj -= timedelta(microseconds=obj.microsecond)
-        self.assertJson(obj, {"_type": "datetime", "value": obj.replace(tzinfo=timezone.utc).timestamp()})
+        self.assertFunc(obj, {"_type": "datetime", "value": obj.replace(tzinfo=timezone.utc).timestamp()})
+
+
+class TestPhunticJson(PhunticTestCases):
+    def assertFunc(self, obj, expected):
+        s = dumps(obj, sort_keys=True)
+        assert s == json.dumps(expected, sort_keys=True)
+        assert loads(s) == obj
 
     def test_class(self):
         obj = object()
@@ -161,7 +168,7 @@ class TestPhuntic:
             dumps(obj)
 
     def test_func(self):
-        obj = my_test_func
+        obj = lambda x: x
         with pytest.raises(PhunticUnknownTypeError):
             dumps(obj)
 
@@ -169,3 +176,10 @@ class TestPhuntic:
         data = json.dumps({'_type': 'fuck', 'value': 1})
         with pytest.raises(ValueError):
             loads(data)
+
+
+class TestPhunticWrap(PhunticTestCases):
+    def assertFunc(self, obj, expected):
+        wrapped = wraps(obj)
+        assert wrapped == expected
+        assert unwraps(wrapped) == obj
